@@ -1,8 +1,26 @@
 import sys
-import os
+import datetime as dt
 sys.path.append('./src')
 
-from bs_valuation import price
+from bs_valuation import get_vol
+
+# Constantes de la especie (opcion call europea):
+"""
+SUBYACENTE
+GGAL
+TIPO DE OPCIÓN
+Call
+VENCIMIENTO
+18/10/2024
+PRECIO DEL EJERCICIO
+1033
+"""
+
+
+rf = 1 #Tasa libre de riesgo 100% 
+strike = 1033
+maturity = dt.datetime(2024, 10, 18) 
+
 
 if __name__ == '__main__':
-    price()
+    get_vol(rf, strike, maturity)
