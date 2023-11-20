@@ -15,12 +15,9 @@ VENCIMIENTO
 PRECIO DEL EJERCICIO
 1033
 """
-
-
 rf = 1 #Tasa libre de riesgo 100% 
-strike = 1033
 maturity = dt.datetime(2024, 10, 18) 
 
 
 if __name__ == '__main__':
-    get_vol(rf, strike, maturity)
+    get_vol(rf, maturity)
