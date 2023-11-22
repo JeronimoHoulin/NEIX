@@ -2,7 +2,9 @@ import pandas as pd
 import numpy as np 
 import datetime as dt
 import matplotlib.pyplot as plt
-import scipy.stats as si
+from scipy.optimize import fsolve
+from scipy.stats import norm
+import math
 
 def extract():
     df  = pd.read_csv("data/Exp_Octubre.csv", sep=';', decimal = ',')
@@ -21,8 +23,21 @@ def extract():
     df['callPrice'] = df[['bid', 'ask']].mean(axis=1)
     df['spotPrice'] = df[['underBid', 'underAsk']].mean(axis=1)
     #print(df.head())
-    #Remove weekends, holidays, and non-trade days:
-    df = df[df['spotPrice'] != 0]
+    df['day'] = df['created_at'].dt.strftime("%Y-%d-%m")
+    #Check if removing weekends, holidays, and non-trade days is necesary:
+
+    '''
+    grouped_data = df.groupby(pd.Grouper(key='created_at', freq='D'))
+    samples_per_day = grouped_data['callPrice'].count()
+    # Identify days with no trading activity
+    no_activity_days = samples_per_day[samples_per_day == 0].index
+    # Check if these weekends/holidays are in the dataset
+    non_trading_activity = df['created_at'].dt.strftime("%Y-%d-%m").isin(no_activity_days)
+    '''
+
+
+    
+
 
     return df
 
@@ -36,141 +51,86 @@ def transform(df, rf, maturity):
     spot = df['spotPrice']
     log_returns= np.log(spot/spot.shift(1)) #B&S assumes log normal dist => we use log returns not abs returns.
 
-    grouped_data = df.groupby(pd.Grouper(key='created_at', freq='D'))
-    samples_per_day = grouped_data['spotPrice'].count()
-    samples = int(samples_per_day.mean())                                                       #  Hay alrededor de 77 muestras x dia.
-    average_time = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60    #  Una muestra cada 18 minutos.
-    time_in_mins =  480 / average_time #480 mins x rueda.
-    df['realized_vol'] = (log_returns.rolling(window=samples).std()*np.sqrt(365 * int(time_in_mins)))
+    #Getting average number of trades a day
+    samples_a_day = df.groupby(pd.Grouper(key='day')).count()
+    samples = int(samples_a_day['spotPrice'].mean())
+    time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60  
+    df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(365 * int(time_in_mins))
+    #Volatilidad calculada segun retornos historicos de la rueda anterior. 
+
 
     """Calculando Volatilidad Implicita de la valuacion del Call con B&S """
+    
     #Call's IV depends on Vega:
     #from: https://www.linkedin.com/pulse/discussing-implied-volatility-python-script-calculate-akash-pathak/
-    
-    def bs_price(c_p, S, K, r, t, sigma):
-        N = si.norm.cdf
-        d1 = (np.log(S/K) + (r+sigma**2/2)*t) / (sigma*np.sqrt(t))
-        d2 = d1 - sigma * np.sqrt(t)
 
-        if c_p == 'c':
-            return N(d1) * S - N(d2) * K * np.exp(-r*t)
-        elif c_p == 'p':
-            return N(-d2) * K * np.exp(-r*t) - N(-d1) * S
-        else:
-            return "Please specify call or put options."
-    
-    ONE_CENT = 0.01
-    step = 0.0001
-
-    def brute_force(c_p, S, K, r, t, market_price, med_sigma):
-            _sigma = med_sigma
-            for i in range(1000): #max number of calculations
-                bs_ = bs_price(c_p, S, K, r, t, sigma = _sigma)
-                diff = market_price - bs_
-                if diff > ONE_CENT:
-                    _sigma = _sigma + step
-                elif diff < 0 and abs(diff) > ONE_CENT:
-                    _sigma = _sigma - step
-                elif abs(diff) < ONE_CENT:
-                    return _sigma
-            return _sigma
-    
-
-    def iv_newton(c_p, S, K, r, t, market_price, med_sigma):
-        MAX_TRY = 1000
-
-        _sigma = med_sigma
-
-        d1 = (np.log(S/K) + (r+_sigma**2/2)*t) / (_sigma*np.sqrt(t))
-
-        for i in range(MAX_TRY):
-            _bs_price = bs_price(c_p,S, K, r, t, sigma=_sigma)
-            diff = market_price - _bs_price
-            vega = S*si.norm.pdf(d1)*np.sqrt(t)
-            if abs(diff) < ONE_CENT:
-                return _sigma
-            _sigma += diff/vega
-        return _sigma
-
-    
-        
-    df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 365
-    df['rf'] = rf / (((maturity - df['created_at']) / np.timedelta64(1, 'D')) * samples)
-    meany = float( df['realized_vol'].mean())
-    df['mean_vol'] = meany
-    #print(df['mean_vol'])
-    #iv = call_imp_vol(df['spotPrice'], df['strike'], df['rf'], df['time_till_exp'], df['callPrice'], df['mean_vol'])
-    #df['implied_vol'] = iv
-    
-    
-    #Ref: https://pythoninoffice.com/calculate-option-implied-volatility-in-python/
-
+    N = norm.cdf
+    N1 = norm.pdf
 
     def d1(S, K, r, sigma, T):
-        return (np.log(S/K)+(r+sigma**2/2)*T)/(sigma*np.sqrt(T))
+        d1 = (np.log(S/K)+(r+sigma**2/2)*T)/(sigma*np.sqrt(T))
+        return d1
+    
     def d2(S, K, r, sigma, T):
-        return (np.log(S/K)+(r-sigma**2/2)*T)/(sigma*np.sqrt(T))
+        d2 = (np.log(S/K)+(r-sigma**2/2)*T)/(sigma*np.sqrt(T))
+        return d2
 
     def call_price(S, K, r, sigma, T):
-        return S*si.norm.cdf(d1(S, K, r, sigma, T), 0.0, 1.0)-K*np.exp(-r*T)*si.norm.cdf(d2(S, K, r, sigma, T), 0.0, 1.0)
+        call_p = S*N(d1(S, K, r, sigma, T))-K*np.exp(-r*T)*N(d2(S, K, r, sigma, T))
+        return call_p
     
     def call_vega(S, K, r, sigma, T):
-        return S*np.sqrt(T)*si.norm.pdf(d1(S, K, r, sigma, T), 0.0, 1.0)
+        v = S*np.sqrt(T)*N1(d1(S, K, r, sigma, T))
+        return v
     
-    def call_imp_vol(S, K, r, T, C0, sigma_est, it=1000):
-        for i in range(it):
-            sigma_est -= ((call_price(S, K, r, sigma_est, T)-C0)/call_vega(S, K, r, sigma_est, T))
-        return np.abs(sigma_est)
+    def call_imp_vol(S, K, r, T, C0, sigma_est, tol=0.05):
+        sigma_bs = 2*sigma_est
+        for i in range(0, 100):
+            while sigma_bs > sigma_est:
+                price = call_price(S, K, r, sigma_est, T)
+                vega = call_vega(S, K, r, sigma_est, T)
+                sigma_bs -= (price - C0) / vega
+                return sigma_bs
+    
 
-
-    df['implied_vol2'] = call_imp_vol(df['spotPrice'], df['strike'], df['rf'], df['time_till_exp'], df['callPrice'], meany)
-
+    df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
+    df['rf'] = ((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (242*60*6) 
+    mean_volat = float( df['realized_vol'].mean())
+    df['mean_vol'] = mean_volat
+    iterations = 1
+    tolerance = 0.01
     df.index = np.arange(0,len(df))
+    df['implied_vol'] = 0
+    df['implied_vol'] = df['implied_vol'].astype(float)
 
-    all_sigmas = []
-    for index, row in df.iterrows():
-        if index == 0:
-            sigma = iv_newton('c', row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], row['mean_vol'])
-            #print(sigma)
-            all_sigmas.append(sigma)
-        else:
-            #print(df.iloc[index-1, 8])
-            last_price = df.iloc[index-1, 8]
-            if row['callPrice'] == last_price:
-                all_sigmas.append(all_sigmas[index-1])
-            if row['callPrice'] != last_price:
-                sigma = iv_newton('c', row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], row['mean_vol'])
-                #print(sigma)
-                all_sigmas.append(sigma)
-        
-
-
-    sigmas = pd.DataFrame(all_sigmas)
-    df['implied_vol'] = sigmas
-    
-    df['realized_vol'] = df['realized_vol'].shift(-samples)
+    #call_imp_vol(df['spotPrice'][0], df['strike'][0], df['rf'][0], df['time_till_exp'][0], df['callPrice'][0],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
+    for i, row in df.iterrows():
+        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], mean_volat)
+        df.at[i, 'implied_vol'] = iv
 
     print(df)
     
-    ### Plot Spot Pri
     
-    fig, ax = plt.subplots(figsize=(12,4))
-    ax.plot(df['spotPrice'], color='tab:blue')
-    ax2=ax.twinx()
-    ax2.plot(df['realized_vol']*100, color='tab:red')
-    ax2.plot(df['implied_vol']*100, color='tab:green')
-    #ax2.plot(df['implied_vol2']*100, color='tab:blue')
-
-    # set x-axis label
-    ax.set_xlabel("Tïme", fontsize = 14)
-    # set y-axis label
-    ax.set_ylabel("Stock Price (USD $)",
-                color="tab:blue",
-                fontsize=14)
-
-    ax2.set_ylabel("Volatility (%)",color="tab:red",fontsize=14)
-    plt.show() 
+    '''
     
+    for index, row in df.iterrows():
+        #Detect a price change in the Call:
+        if index == 0:
+            iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], row['mean_vol'], iterations, tolerance)
+            df.at[index, 'implied_vol'] = iv
+        else:
+            last_price = df.at[index-1, 'callPrice']
+            curr_price = row['callPrice']
+            if curr_price == last_price:
+                df.at[index, 'implied_vol'] = df.at[index -1, 'implied_vol']    
+            else:                                                                                                       #Guess is now mean past IV !
+                iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
+                df.at[index, 'implied_vol'] = iv if not np.isnan(iv) and iv >=0.8*df[df['realized_vol']>0]['realized_vol'].min() and iv <= 0.8*df['realized_vol'].max() else df.at[index - 1, 'implied_vol']
+    
+    '''
+
+    #Realized Vol is backwards looking whilst IV is foward looking, so for visuals I will shift the RV back 1 day.
+    df['realized_vol'] = df['realized_vol'].shift(-samples)
 
     return df
 
@@ -181,13 +141,30 @@ def load():
     print("Loading")
     
     
-def visualize():
-    print('Visuals')
+def visualize(df):
+        ### Plot 
+    fig, ax = plt.subplots(figsize=(12,4))
+    ax.plot(df['spotPrice'], color='tab:blue')
+    ax2=ax.twinx()
+    ax2.plot(df['realized_vol']*100, color='tab:red')
+    ax2.plot(df['implied_vol']*100, color='tab:purple')
+
+    # set x-axis label
+    ax.set_xlabel("Tïme", fontsize = 14)
+    # set y-axis label
+    ax.set_ylabel("Spot Price ($)",
+                color="tab:blue",
+                fontsize=14)
+
+    ax2.set_ylabel("Volatility (%)",color="tab:red",fontsize=14)
+    plt.show() 
+    
 
 
 def get_vol(rf, maturity): 
     df = extract()
     df_vol = transform(df, rf, maturity)
+    visualize(df_vol)
 
 
 
