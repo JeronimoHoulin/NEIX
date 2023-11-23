@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np 
 import datetime as dt
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve
 from scipy.stats import norm
-import math
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import numpy as np
+
 
 def extract():
     df  = pd.read_csv("data/Exp_Octubre.csv", sep=';', decimal = ',')
@@ -26,15 +28,12 @@ def extract():
     df['day'] = df['created_at'].dt.strftime("%Y-%d-%m")
     #Check if removing weekends, holidays, and non-trade days is necesary:
 
+    #Call price generates a lot of outliers:
+    q = df["callPrice"].quantile(0.6)
+    df = df[df['callPrice'] < q]
     '''
-    grouped_data = df.groupby(pd.Grouper(key='created_at', freq='D'))
-    samples_per_day = grouped_data['callPrice'].count()
-    # Identify days with no trading activity
-    no_activity_days = samples_per_day[samples_per_day == 0].index
-    # Check if these weekends/holidays are in the dataset
-    non_trading_activity = df['created_at'].dt.strftime("%Y-%d-%m").isin(no_activity_days)
+    df = df[(df["callPrice"] / df["callPrice"].shift(-500).mean()) -1 < 0.9]
     '''
-
 
     
 
@@ -94,7 +93,7 @@ def transform(df, rf, maturity):
     
 
     df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
-    df['rf'] = ((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (242*60*6) 
+    df['rf'] = (rf * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
     mean_volat = float( df['realized_vol'].mean())
     df['mean_vol'] = mean_volat
     iterations = 1
@@ -102,32 +101,14 @@ def transform(df, rf, maturity):
     df.index = np.arange(0,len(df))
     df['implied_vol'] = 0
     df['implied_vol'] = df['implied_vol'].astype(float)
+    print(df)
 
     #call_imp_vol(df['spotPrice'][0], df['strike'][0], df['rf'][0], df['time_till_exp'][0], df['callPrice'][0],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
     for i, row in df.iterrows():
         iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], mean_volat)
         df.at[i, 'implied_vol'] = iv
+    
 
-    print(df)
-    
-    
-    '''
-    
-    for index, row in df.iterrows():
-        #Detect a price change in the Call:
-        if index == 0:
-            iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], row['mean_vol'], iterations, tolerance)
-            df.at[index, 'implied_vol'] = iv
-        else:
-            last_price = df.at[index-1, 'callPrice']
-            curr_price = row['callPrice']
-            if curr_price == last_price:
-                df.at[index, 'implied_vol'] = df.at[index -1, 'implied_vol']    
-            else:                                                                                                       #Guess is now mean past IV !
-                iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
-                df.at[index, 'implied_vol'] = iv if not np.isnan(iv) and iv >=0.8*df[df['realized_vol']>0]['realized_vol'].min() and iv <= 0.8*df['realized_vol'].max() else df.at[index - 1, 'implied_vol']
-    
-    '''
 
     #Realized Vol is backwards looking whilst IV is foward looking, so for visuals I will shift the RV back 1 day.
     df['realized_vol'] = df['realized_vol'].shift(-samples)
@@ -159,6 +140,13 @@ def visualize(df):
     ax2.set_ylabel("Volatility (%)",color="tab:red",fontsize=14)
     plt.show() 
     
+def surface(df):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    X, Y = df['time_till_exp'], df['implied_vol']
+    ax.plot_surface(X, Y, [df['strike'], df['strike']], cmap=cm.gist_rainbow)
+
 
 
 def get_vol(rf, maturity): 
