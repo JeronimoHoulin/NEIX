@@ -52,9 +52,9 @@ def transform(df, rf, maturity):
 
     #Getting average number of trades a day
     samples_a_day = df.groupby(pd.Grouper(key='day')).count()
-    samples = int(samples_a_day['spotPrice'].mean())
-    time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60  
-    df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(365 * int(time_in_mins))
+    samples = int(samples_a_day['spotPrice'].mean())                                          #Average samples a day.
+    time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60  #Average interval of each new sample (in mins).
+    df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(252 * int(time_in_mins))
     #Volatilidad calculada segun retornos historicos de la rueda anterior. 
 
 
@@ -83,6 +83,7 @@ def transform(df, rf, maturity):
         return v
     
     def call_imp_vol(S, K, r, T, C0, sigma_est, tol=0.05):
+        '''
         sigma_bs = 2*sigma_est
         for i in range(0, 100):
             while sigma_bs > sigma_est:
@@ -90,10 +91,18 @@ def transform(df, rf, maturity):
                 vega = call_vega(S, K, r, sigma_est, T)
                 sigma_bs -= (price - C0) / vega
                 return sigma_bs
-    
+        '''
+        price = call_price(S, K, r, sigma_est, T)
+        vega = call_vega(S, K, r, sigma_est, T)
+        sigma = - (price - C0) / vega + sigma_est
+        if np.abs(sigma - sigma_est) >0.01:
+            sigma = np.abs(sigma) - 0.001
+        return sigma
+
+
 
     df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
-    df['rf'] = (rf * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
+    df['rf'] = (rf * df['time_till_exp'] * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
     mean_volat = float( df['realized_vol'].mean())
     df['mean_vol'] = mean_volat
     iterations = 1
@@ -101,17 +110,18 @@ def transform(df, rf, maturity):
     df.index = np.arange(0,len(df))
     df['implied_vol'] = 0
     df['implied_vol'] = df['implied_vol'].astype(float)
-    print(df)
 
     #call_imp_vol(df['spotPrice'][0], df['strike'][0], df['rf'][0], df['time_till_exp'][0], df['callPrice'][0],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
     for i, row in df.iterrows():
-        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], mean_volat)
+        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'])
         df.at[i, 'implied_vol'] = iv
     
 
 
     #Realized Vol is backwards looking whilst IV is foward looking, so for visuals I will shift the RV back 1 day.
-    df['realized_vol'] = df['realized_vol'].shift(-samples)
+    #df['realized_vol'] = df['realized_vol'].shift(-samples)
+
+    print(df)
 
     return df
 
