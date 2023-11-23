@@ -82,7 +82,7 @@ def transform(df, rf, maturity):
         v = S*np.sqrt(T)*N1(d1(S, K, r, sigma, T))
         return v
     
-    def call_imp_vol(S, K, r, T, C0, sigma_est, tol=0.05):
+    def call_imp_vol(S, K, r, T, C0, sigma_est, tol=0.009):
         '''
         sigma_bs = 2*sigma_est
         for i in range(0, 100):
@@ -95,18 +95,25 @@ def transform(df, rf, maturity):
         price = call_price(S, K, r, sigma_est, T)
         vega = call_vega(S, K, r, sigma_est, T)
         sigma = - (price - C0) / vega + sigma_est
-        if np.abs(sigma - sigma_est) >0.01:
-            sigma = np.abs(sigma) - 0.001
+        while sigma > tol + sigma_est:
+            price = price + 5
+            vega = call_vega(S, K, r, sigma_est, T)
+            sigma = np.abs((price - C0) / vega + sigma_est)
+            print(sigma)
+        while sigma < tol + sigma_est:
+            price = price - 5
+            vega = call_vega(S, K, r, sigma_est, T)
+            sigma = np.abs((price - C0) / vega + sigma_est)
+            print(sigma)
+        print("----")
         return sigma
 
 
 
     df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
-    df['rf'] = (rf * df['time_till_exp'] * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
+    df['rf'] = (rf * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
     mean_volat = float( df['realized_vol'].mean())
     df['mean_vol'] = mean_volat
-    iterations = 1
-    tolerance = 0.01
     df.index = np.arange(0,len(df))
     df['implied_vol'] = 0
     df['implied_vol'] = df['implied_vol'].astype(float)
