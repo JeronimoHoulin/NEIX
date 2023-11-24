@@ -1,11 +1,8 @@
 import pandas as pd
 import numpy as np 
-import datetime as dt
-import matplotlib.pyplot as plt
 from scipy.stats import norm
+
 import matplotlib.pyplot as plt
-from matplotlib import cm
-import numpy as np
 
 
 def extract():
@@ -30,10 +27,8 @@ def extract():
     #Check if removing weekends, holidays, and non-trade days is necesary:
 
     #Call price generates a lot of outliers:
-    q = df["callPrice"].quantile(0.6)
+    q = df["callPrice"].quantile(0.7)
     df = df[df['callPrice'] < q]
-
-    
 
 
     return df
@@ -44,7 +39,7 @@ def transform(df, rf, maturity, tolerance):
 
     """Calculando Volatilidad Realizada del Precio Spot / Subyacente """
     spot = df['spotPrice']
-    log_returns= np.log(spot/spot.shift(1))                                                             #B&S asume una distribucion Normal Logarítmica => por eso usamos Retornos Logaritmicos, no absolutos. 
+    log_returns= np.log(spot/spot.shift(1))                                                              #B&S asume una distribucion Normal Logarítmica => por eso usamos Retornos Logaritmicos, no absolutos. 
     samples_a_day = df.groupby(pd.Grouper(key='day')).count()
     samples = int(samples_a_day['spotPrice'].mean())                                                     #Promedio de muestras x rueda.
     time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60             #Apromedio de intervalo de tiempo por muestra (en minutos).
@@ -73,13 +68,13 @@ def transform(df, rf, maturity, tolerance):
         price = call_price(S, K, r, sigma_est, T)
         vega = call_vega(S, K, r, sigma_est, T)
         sigma = - (price - C0) / vega + sigma_est
-        #Cambiamos el precio del Call en la formula de B&S para cambiar Vega, la derivada de B&S en terminos de volatilidad.
+        #Cambiamos el precio del Call en la formula de B&S para cambiar Vega; la derivada de B&S en terminos de volatilidad (σ).
         while sigma > sigma_est +tol:
-            price = price + 30
+            price = price + 5
             vega = call_vega(S, K, r, sigma_est, T)
             sigma = np.abs((price - C0) / vega + sigma_est)
         while sigma < sigma_est - tol:
-            price = price - 4
+            price = price - 5
             vega = call_vega(S, K, r, sigma_est, T)
             sigma = np.abs((price - C0) / vega + sigma_est)
         return sigma
@@ -95,9 +90,21 @@ def transform(df, rf, maturity, tolerance):
 
     #Estimamos Sigma (σ) via B&S por cada muestra.
     print("Calculanfo el Sigma de B&S a fuerza bruta...")
-    for i, row in df.iterrows():                                                                        #Sigma estimado va a ser la VR anterior.
-        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'], tolerance)
-        df.at[i, 'implied_vol'] = iv
+    for i, row in df.iterrows():
+        if i == 0:
+            iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'], tolerance)
+            df.at[i, 'implied_vol'] = iv
+        else:
+            last_price = df.at[i-1,'callPrice']
+            curr_price = df.at[i,'callPrice']
+            if last_price == curr_price:
+                #Sin no hay cambio de precio en el Call, no cambiamos la Volatilidad Implícita.
+                df.at[i, 'implied_vol'] = df.at[i-1, 'implied_vol']
+            else:
+                                                                                                                     #Sigma estimado = VR anterior.
+                iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'], tolerance)
+                df.at[i, 'implied_vol'] = iv
+
     return df
     
     

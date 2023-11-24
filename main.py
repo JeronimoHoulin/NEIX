@@ -18,7 +18,7 @@ PRECIO DEL EJERCICIO
 
 tasa_anual = 1 #Tasa libre de riesgo. 
 vencimiento = dt.datetime(2024, 10, 18) 
-tolerancia = 0.04 #La Tolerancia que le damos al modelo de B&S (diferencia entre Sigma calculado y esperado). Recomendado rango: 0.01 : 0.09
+tolerancia = 0.01 #La Tolerancia que le damos al modelo de B&S (diferencia entre Sigma calculado y esperado). Recomendado rango: 0.01 : 0.09
 
 if __name__ == '__main__':
     get_vol(tasa_anual, vencimiento, tolerancia)
