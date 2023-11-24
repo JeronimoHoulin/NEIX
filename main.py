@@ -4,7 +4,7 @@ sys.path.append('./src')
 
 from bs_valuation import get_vol
 
-# Constantes de la especie (opcion call europea):
+# Constantes de la especie (opcion Call Europeo):
 """
 SUBYACENTE
 GGAL
@@ -15,9 +15,10 @@ VENCIMIENTO
 PRECIO DEL EJERCICIO
 1033
 """
-rf = 1 #Tasa libre de riesgo 100% 
-maturity = dt.datetime(2024, 10, 18) 
 
+tasa_anual = 1 #Tasa libre de riesgo. 
+vencimiento = dt.datetime(2024, 10, 18) 
+tolerancia = 0.04 #La Tolerancia que le damos al modelo de B&S (diferencia entre Sigma calculado y esperado). Recomendado rango: 0.01 : 0.09
 
 if __name__ == '__main__':
-    get_vol(rf, maturity)
+    get_vol(tasa_anual, vencimiento, tolerancia)

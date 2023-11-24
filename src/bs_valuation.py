@@ -9,6 +9,7 @@ import numpy as np
 
 
 def extract():
+    print("Linpiando la base de datos...")
     df  = pd.read_csv("data/Exp_Octubre.csv", sep=';', decimal = ',')
     df.rename({"underAst":"underAsk"}, axis = "columns", inplace = True)
     df = df.replace(r'^\s*$', np.NaN, regex=True)  #Replace possible blank values wiht NaN.
@@ -31,9 +32,6 @@ def extract():
     #Call price generates a lot of outliers:
     q = df["callPrice"].quantile(0.6)
     df = df[df['callPrice'] < q]
-    '''
-    df = df[(df["callPrice"] / df["callPrice"].shift(-500).mean()) -1 < 0.9]
-    '''
 
     
 
@@ -42,105 +40,69 @@ def extract():
 
     
 
-def transform(df, rf, maturity):
+def transform(df, rf, maturity, tolerance):
+
     """Calculando Volatilidad Realizada del Precio Spot / Subyacente """
-    #Utilizando algo tan sencillo como: https://www.macroption.com/historical-volatility-excel
-    #Suponiendo que cada muestra es "un dia" y convirtiendo el rdo en un % anualizado multiplicando por muestras al dia promedio.
-
     spot = df['spotPrice']
-    log_returns= np.log(spot/spot.shift(1)) #B&S assumes log normal dist => we use log returns not abs returns.
-
-    #Getting average number of trades a day
+    log_returns= np.log(spot/spot.shift(1))                                                             #B&S asume una distribucion Normal Logarítmica => por eso usamos Retornos Logaritmicos, no absolutos. 
     samples_a_day = df.groupby(pd.Grouper(key='day')).count()
-    samples = int(samples_a_day['spotPrice'].mean())                                          #Average samples a day.
-    time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60  #Average interval of each new sample (in mins).
-    df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(252 * int(time_in_mins))
-    #Volatilidad calculada segun retornos historicos de la rueda anterior. 
+    samples = int(samples_a_day['spotPrice'].mean())                                                     #Promedio de muestras x rueda.
+    time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60             #Apromedio de intervalo de tiempo por muestra (en minutos).
+    df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(252 * int(time_in_mins))      #Volatilidad calculada segun retornos historicos de la rueda anterior. 
 
 
     """Calculando Volatilidad Implicita de la valuacion del Call con B&S """
-    
-    #Call's IV depends on Vega:
-    #from: https://www.linkedin.com/pulse/discussing-implied-volatility-python-script-calculate-akash-pathak/
 
+    #B&S
     N = norm.cdf
     N1 = norm.pdf
-
     def d1(S, K, r, sigma, T):
         d1 = (np.log(S/K)+(r+sigma**2/2)*T)/(sigma*np.sqrt(T))
         return d1
-    
     def d2(S, K, r, sigma, T):
         d2 = (np.log(S/K)+(r-sigma**2/2)*T)/(sigma*np.sqrt(T))
         return d2
-
     def call_price(S, K, r, sigma, T):
         call_p = S*N(d1(S, K, r, sigma, T))-K*np.exp(-r*T)*N(d2(S, K, r, sigma, T))
         return call_p
-    
     def call_vega(S, K, r, sigma, T):
         v = S*np.sqrt(T)*N1(d1(S, K, r, sigma, T))
         return v
-    
-    def call_imp_vol(S, K, r, T, C0, sigma_est, tol=0.009):
-        '''
-        sigma_bs = 2*sigma_est
-        for i in range(0, 100):
-            while sigma_bs > sigma_est:
-                price = call_price(S, K, r, sigma_est, T)
-                vega = call_vega(S, K, r, sigma_est, T)
-                sigma_bs -= (price - C0) / vega
-                return sigma_bs
-        '''
+    def call_imp_vol(S, K, r, T, C0, sigma_est, tol):
+        #El desvio estandar (σ) no se puede despejar d ela funcion B&S, se puede unicamente acercar a un valor esperado usando prueba y error.
         price = call_price(S, K, r, sigma_est, T)
         vega = call_vega(S, K, r, sigma_est, T)
         sigma = - (price - C0) / vega + sigma_est
-        while sigma > tol + sigma_est:
-            price = price + 5
+        #Cambiamos el precio del Call en la formula de B&S para cambiar Vega, la derivada de B&S en terminos de volatilidad.
+        while sigma > sigma_est +tol:
+            price = price + 30
             vega = call_vega(S, K, r, sigma_est, T)
             sigma = np.abs((price - C0) / vega + sigma_est)
-            print(sigma)
-        while sigma < tol + sigma_est:
-            price = price - 5
+        while sigma < sigma_est - tol:
+            price = price - 4
             vega = call_vega(S, K, r, sigma_est, T)
             sigma = np.abs((price - C0) / vega + sigma_est)
-            print(sigma)
-        print("----")
         return sigma
 
 
 
+
     df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
-    df['rf'] = (rf * (252/365)) / (252*6*60)  #((rf * df['time_till_exp'])  *(time_in_mins / (60*6)) ) / df['time_till_exp']          #Creating a "15minute yield"... rf / (252*60*6) 
-    mean_volat = float( df['realized_vol'].mean())
-    df['mean_vol'] = mean_volat
+    df['rf'] = ((rf * (252/365)) / (252*6*60)) / time_in_mins                                           #Crea una taasa intra-diaria (cada 15mins) x dias habiles de mercado.
     df.index = np.arange(0,len(df))
     df['implied_vol'] = 0
     df['implied_vol'] = df['implied_vol'].astype(float)
 
-    #call_imp_vol(df['spotPrice'][0], df['strike'][0], df['rf'][0], df['time_till_exp'][0], df['callPrice'][0],df[df['realized_vol']>0]['realized_vol'].mean(), iterations, tolerance)
-    for i, row in df.iterrows():
-        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'])
+    #Estimamos Sigma (σ) via B&S por cada muestra.
+    print("Calculanfo el Sigma de B&S a fuerza bruta...")
+    for i, row in df.iterrows():                                                                        #Sigma estimado va a ser la VR anterior.
+        iv = call_imp_vol(row['spotPrice'], row['strike'], row['rf'], row['time_till_exp'], row['callPrice'], df.at[i,'realized_vol'], tolerance)
         df.at[i, 'implied_vol'] = iv
-    
-
-
-    #Realized Vol is backwards looking whilst IV is foward looking, so for visuals I will shift the RV back 1 day.
-    #df['realized_vol'] = df['realized_vol'].shift(-samples)
-
-    print(df)
-
     return df
-
-
-
-
-def load():
-    print("Loading")
     
     
 def visualize(df):
-        ### Plot 
+    """Visualizacion del precio Spot de GGAL y las volatilidades Realizadas e Implicitas"""
     fig, ax = plt.subplots(figsize=(12,4))
     ax.plot(df['spotPrice'], color='tab:blue')
     ax2=ax.twinx()
@@ -157,22 +119,10 @@ def visualize(df):
     ax2.set_ylabel("Volatility (%)",color="tab:red",fontsize=14)
     plt.show() 
     
-def surface(df):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    X, Y = df['time_till_exp'], df['implied_vol']
-    ax.plot_surface(X, Y, [df['strike'], df['strike']], cmap=cm.gist_rainbow)
 
 
 
-def get_vol(rf, maturity): 
+def get_vol(rf, maturity, tolerance): 
     df = extract()
-    df_vol = transform(df, rf, maturity)
-    visualize(df_vol)
-
-
-
-rf = 1 
-maturity = dt.datetime(2024, 10, 18) 
-get_vol(rf, maturity)
+    df = transform(df, rf, maturity, tolerance)
+    visualize(df)
