@@ -51,7 +51,7 @@ bool isFloat(const std::string& s) {
 
 float calculateRollingSD(const std::vector<double>& data, size_t windowSize) {
     if (data.size() < windowSize) {
-        return 0.0; // or any default value you prefer
+        return NAN;
     }
 
     auto start = data.end() - windowSize;
@@ -113,7 +113,7 @@ double call_imp_vol(double S, double K, double r, double T, double C0, double si
 
     // Iterative approach to refine the estimate
     //std::cout << "Atcual Price: " << C0 << std::endl;
-    while (  price > C0 + tol  && iter < max_iter) {
+    while (  price / C0  -1 > tol  && iter < max_iter) {
         //std::cout << price << std::endl;
         price = price - 5;
         vega = call_vega(S, K, r, sigma, T);
@@ -121,7 +121,7 @@ double call_imp_vol(double S, double K, double r, double T, double C0, double si
         iter++;
     }
     //std::cout << "---" << std::endl;
-    while ( price < C0 - tol && iter < max_iter) {
+    while ( price / C0 -1 <  tol && iter < max_iter) {
         //std::cout << price << std::endl;
         price = price + 5;
         vega = call_vega(S, K, r, sigma, T);
@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
 
         const int windowSize = 114; // 114 samples a day on average. 
         // Sigma from B&S error tolerance compared to our estimated Sigma.
-        const double tolerance = 1;
+        const double tolerance = 0.01;
         double rf = 0.0000004; //Rf converted to a 15min yield. ((100% * (252/365)) / (252*6*60)) / 15 
 
         for (size_t i = 1; i < cleanedLines.size(); ++i) {
@@ -242,7 +242,7 @@ int main(int argc, char* argv[]) {
             // Check if enough data points are available for calculation
             if (logReturns.size() >= windowSize) {
                 cleanedLines[i].realizedVol = calculateRollingSD(logReturns, windowSize) * sqrt(252.0 * 18);
-                // 15 MINS is average time between samples (to make it an annual rate).
+                // 18 MINS is average time between samples (to make IV an annual rate).
             }
 
             if(i == 0){
@@ -251,7 +251,7 @@ int main(int argc, char* argv[]) {
                         rf,
                         cleanedLines[i].timetomat, 
                         cleanedLines[i].callPrice,
-                        cleanedLines[i-1].realizedVol,
+                        cleanedLines[i].realizedVol,
                         tolerance);
                 cleanedLines[i].impliedVol = iv;
             }else{
@@ -277,15 +277,36 @@ int main(int argc, char* argv[]) {
         // Print the vector elements
         
         for (const auto& data : cleanedLines) {
-            std::cout << "Strike: " << data.strike << ", ";
-            std::cout << "Time To Mat: " << data.timetomat << ", ";
+            std::cout << "Time To Mat: " << data.timetomat << " Years, ";
             std::cout << "Call Price: " << data.callPrice << ", ";
             std::cout << "Spot Price: " << data.spotPrice << ", ";
             std::cout << "Realized Volatility: " << data.realizedVol << ", ";
             std::cout << "Implied Volatility: " << data.impliedVol << std::endl;
         }
         
-        
+        // Create an output CSV file
+        std::ofstream outputFile("output.csv");
+
+        // Check if the file is opened successfully
+        if (!outputFile.is_open()) {
+            std::cerr << "Error opening output file: output.csv" << std::endl;
+            return 1;
+        }
+
+        // Write header to the CSV file
+        outputFile << "Time To Mat,Call Price,Spot Price,Realized Volatility,Implied Volatility\n";
+
+        // Write data to the CSV file
+        for (const auto& data : cleanedLines) {
+            outputFile << data.timetomat << ",";        // Time To Mat
+            outputFile << data.callPrice << ",";         // Call Price
+            outputFile << data.spotPrice << ",";         // Spot Price
+            outputFile << data.realizedVol << ",";       // Realized Volatility
+            outputFile << data.impliedVol << "\n";       // Implied Volatility
+        }
+
+        // Close the output CSV file
+        outputFile.close();
 
         return 0;
     } else {

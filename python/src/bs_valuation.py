@@ -1,13 +1,20 @@
 import pandas as pd
 import numpy as np 
 from scipy.stats import norm
-
+import sys, os
 import matplotlib.pyplot as plt
 
 
 def extract():
-    print("Linpiando la base de datos...")
-    df  = pd.read_csv("data/Exp_Octubre.csv", sep=';', decimal = ',')
+    # Get the current script's directory (src folder)
+    current_script_directory = os.path.dirname(os.path.abspath(__file__))
+    # Navigate to the parent directory (project folder)
+    project_directory = os.path.dirname(current_script_directory)
+    # Construct the path to the 'data' directory
+    data_directory = os.path.join(project_directory, 'data')
+    csv_file_path = os.path.join(data_directory, 'Exp_Octubre.csv')
+    print("Limpiando datos..")
+    df  = pd.read_csv(csv_file_path, sep=';', decimal = ',')
     df.rename({"underAst":"underAsk"}, axis = "columns", inplace = True)
     df = df.replace(r'^\s*$', np.NaN, regex=True)  #Replace possible blank values with NaN.
     df = df.replace('\\N', np.NaN)                 #Replace \N with NaN.
@@ -19,10 +26,8 @@ def extract():
     df['ask'] = [x.replace(',', '.') for x in df['ask']]
     df['ask'] = df['ask'].astype(float)
     df['created_at'] = pd.to_datetime(df['created_at'])
-    #print(df.dtypes)
     df['callPrice'] = df[['bid', 'ask']].mean(axis=1)
     df['spotPrice'] = df[['underBid', 'underAsk']].mean(axis=1)
-    #print(df.head())
     df['day'] = df['created_at'].dt.strftime("%Y-%d-%m")
     #Check if removing weekends, holidays, and non-trade days is necesary:
 
@@ -43,7 +48,6 @@ def transform(df, rf, maturity, tolerance):
     samples_a_day = df.groupby(pd.Grouper(key='day')).count()
     samples = int(samples_a_day['spotPrice'].mean())                                                     #Promedio de muestras x rueda.
     time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60             #Apromedio de intervalo de tiempo por muestra (en minutos).
-    print(samples)
     df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(252 * int(time_in_mins))      #Volatilidad calculada segun retornos historicos de la rueda anterior. 
 
 
