@@ -1,8 +1,8 @@
-### NEIX
-##NEIX Algorithmic Trader Task.
+# NEIX
+## NEIX Algorithmic Trader Task.
 
 
-#Aquí los pasos que tomé para resolver este ejercicio:
+### Aquí los pasos que tomé para resolver este ejercicio:
 
 ENTER
 
