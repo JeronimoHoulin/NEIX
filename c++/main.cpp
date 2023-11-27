@@ -275,7 +275,6 @@ int main(int argc, char* argv[]) {
 
 
         // Print the vector elements
-        
         for (const auto& data : cleanedLines) {
             std::cout << "Time To Mat: " << data.timetomat << " Years, ";
             std::cout << "Call Price: " << data.callPrice << ", ";
