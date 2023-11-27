@@ -1,17 +1,9 @@
 # NEIX
-<<<<<<< HEAD
-## NEIX Algorithmic Trader Task.
-=======
 ## NEIX Algorithmic Trader Task
->>>>>>> dc5b24246ec18737c488d2a11557704a3ca1eb3e
 
 ### Aquí los pasos que tomé para resolver este ejercicio:
 
-<<<<<<< HEAD
-### Aquí los pasos que tomé para resolver este ejercicio:
-=======
 <br />
->>>>>>> dc5b24246ec18737c488d2a11557704a3ca1eb3e
 
 - **Recibir y limpiar datos de entrada:**
   - Leer CSV.
