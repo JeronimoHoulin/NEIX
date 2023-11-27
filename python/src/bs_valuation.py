@@ -6,11 +6,10 @@ import matplotlib.pyplot as plt
 
 
 def extract():
-    # Get the current script's directory (src folder)
+    # Directorio de este archivo.
     current_script_directory = os.path.dirname(os.path.abspath(__file__))
-    # Navigate to the parent directory (project folder)
     project_directory = os.path.dirname(current_script_directory)
-    # Construct the path to the 'data' directory
+    # Cambiar directorio al archivo de datos.
     data_directory = os.path.join(project_directory, 'data')
     csv_file_path = os.path.join(data_directory, 'Exp_Octubre.csv')
     print("Limpiando datos..")
@@ -19,7 +18,6 @@ def extract():
     df = df.replace(r'^\s*$', np.NaN, regex=True)  #Replace possible blank values with NaN.
     df = df.replace('\\N', np.NaN)                 #Replace \N with NaN.
     df=df.dropna()                                 #Only 31 rows with NaN values; <1% => Drop all rows containing NAN.
-    #Changing types
     df['description'].to_string()
     df['bid'] = [x.replace(',', '.') for x in df['bid']]
     df['bid'] = df['bid'].astype(float)
