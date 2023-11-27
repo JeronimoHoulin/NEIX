@@ -29,6 +29,6 @@
 - **Visualizar los datos:**
   - Gráfico de precio Spot de GGAL (subyacente) vs las volatilidades.
 
-  ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/final.jpeg)
+  ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/final.png)
 
 Este trabajo fue escrito en Python, y las visualizaciones con la librería matplotlib. Puedes ejecutar el script `main.py` en la carpeta `python` para observar el gráfico en cuestión. El trabajo también está escrito en C++ tomando la misma estructura y supuestos, ejecutando el script `main.cpp` en `c++`. Sin gráficos, pero la salida de datos del script en C++ se puede ver en `output.csv`.
