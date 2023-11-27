@@ -12,7 +12,7 @@
   - Deshacerse de NA's y muestras vacías (<1% de los datos).
   - Como se puede apreciar en la siguiente imagen, el precio de mercado del Call ha visto cotizaciones atípicas que podrían deberse a mala entrada de datos o aperturas después de días no hábiles muy volátiles.
 
-  ![Imagen](URL_DE_LA_IMAGEN)
+  ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/call_outliers.jpeg)
 
 - **Agregar datos:**
   - Precio de Call / Subyacente promedio.
@@ -29,6 +29,6 @@
 - **Visualizar los datos:**
   - Gráfico de precio Spot de GGAL (subyacente) vs las volatilidades.
 
-  ![Imagen](URL_DE_LA_IMAGEN)
+  ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/final.jpeg)
 
 Este trabajo fue escrito en Python, y las visualizaciones con la librería matplotlib. Puedes ejecutar el script `main.py` en la carpeta `python` para observar el gráfico en cuestión. El trabajo también está escrito en C++ tomando la misma estructura y supuestos, ejecutando el script `main.cpp` en `c++`. Sin gráficos, pero la salida de datos del script en C++ se puede ver en `output.csv`.
