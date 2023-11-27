@@ -9,9 +9,9 @@ def extract():
     print("Linpiando la base de datos...")
     df  = pd.read_csv("data/Exp_Octubre.csv", sep=';', decimal = ',')
     df.rename({"underAst":"underAsk"}, axis = "columns", inplace = True)
-    df = df.replace(r'^\s*$', np.NaN, regex=True)  #Replace possible blank values wiht NaN.
+    df = df.replace(r'^\s*$', np.NaN, regex=True)  #Replace possible blank values with NaN.
     df = df.replace('\\N', np.NaN)                 #Replace \N with NaN.
-    df=df.dropna()                                 #Only 31 rows with NaN values; <1% => Drop all rows ocntaining NAN.
+    df=df.dropna()                                 #Only 31 rows with NaN values; <1% => Drop all rows containing NAN.
     #Changing types
     df['description'].to_string()
     df['bid'] = [x.replace(',', '.') for x in df['bid']]
@@ -43,6 +43,7 @@ def transform(df, rf, maturity, tolerance):
     samples_a_day = df.groupby(pd.Grouper(key='day')).count()
     samples = int(samples_a_day['spotPrice'].mean())                                                     #Promedio de muestras x rueda.
     time_in_mins = (df['created_at'] - df['created_at'].shift(1)).mean().total_seconds() /60             #Apromedio de intervalo de tiempo por muestra (en minutos).
+    print(samples)
     df['realized_vol'] = log_returns.rolling(window=samples).std()*np.sqrt(252 * int(time_in_mins))      #Volatilidad calculada segun retornos historicos de la rueda anterior. 
 
 
@@ -76,14 +77,14 @@ def transform(df, rf, maturity, tolerance):
         while sigma < sigma_est - tol:
             price = price - 5
             vega = call_vega(S, K, r, sigma_est, T)
-            sigma = np.abs((price - C0) / vega + sigma_est)
+            sigma = np.abs((price - C0) / vega  + sigma_est)
         return sigma
 
 
 
 
     df['time_till_exp']  = ((maturity - df['created_at']) / np.timedelta64(1, 'D')) / 242
-    df['rf'] = ((rf * (252/365)) / (252*6*60)) / time_in_mins                                           #Crea una taasa intra-diaria (cada 15mins) x dias habiles de mercado.
+    df['rf'] = ((rf * (252/365)) / (252*6*60)) / time_in_mins                                     #Crea una taasa intra-diaria (cada 15mins) x dias habiles de mercado.
     df.index = np.arange(0,len(df))
     df['implied_vol'] = 0
     df['implied_vol'] = df['implied_vol'].astype(float)

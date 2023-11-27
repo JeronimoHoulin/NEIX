@@ -1,2 +1,2 @@
 # NEIX
-NEIX Algorithmi Trader Task.
+NEIX Algorithmic Trader Task.

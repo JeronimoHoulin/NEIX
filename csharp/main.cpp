@@ -11,10 +11,13 @@
 #include <algorithm>
 #include <chrono>
 #include <numeric>
+#include <ctime>
+
 
 struct LineData {
     std::chrono::system_clock::time_point created_at; // Timestamp
     double strike;
+    double timetomat;
     double callPrice;
     double spotPrice;
     double realizedVol;
@@ -46,21 +49,90 @@ bool isFloat(const std::string& s) {
     }
 }
 
-float calculateSD(const std::vector<double>& data, size_t windowSize) {
-    float sum = 0.0, mean, standardDeviation = 0.0;
-
-    for (size_t i = 0; i < windowSize; ++i) {
-        sum += data[i];
+float calculateRollingSD(const std::vector<double>& data, size_t windowSize) {
+    if (data.size() < windowSize) {
+        return 0.0; // or any default value you prefer
     }
 
-    mean = sum / windowSize;
+    auto start = data.end() - windowSize;
+    auto end = data.end();
 
-    for (size_t i = 0; i < windowSize; ++i) {
-        standardDeviation += pow(data[i] - mean, 2);
+    float sum = std::accumulate(start, end, 0.0);
+    float mean = sum / windowSize;
+    float standardDeviation = 0.0;
+
+    for (auto it = start; it != end; ++it) {
+        standardDeviation += pow(*it - mean, 2);
     }
 
-    return sqrt(standardDeviation);
+    return sqrt(standardDeviation / windowSize);
 }
+
+// Function to calculate cumulative distribution function (CDF) of standard normal distribution
+double N(double x) {
+    return 0.5 * (1.0 + std::erf(x / std::sqrt(2.0)));
+}
+
+// Function to calculate probability density function (PDF) of standard normal distribution
+double N1(double x) {
+    return (1.0 / std::sqrt(2.0 * M_PI)) * std::exp(-0.5 * x * x);
+}
+
+
+// Function to calculate d1 in Black-Scholes formula
+double d1(double S, double K, double r, double sigma, double T) {
+    return (std::log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * std::sqrt(T));
+}
+
+// Function to calculate d2 in Black-Scholes formula
+double d2(double S, double K, double r, double sigma, double T) {
+    return (std::log(S / K) + (r - 0.5 * sigma * sigma) * T) / (sigma * std::sqrt(T));
+}
+
+// Function to calculate call price using Black-Scholes formula
+double call_price(double S, double K, double r, double sigma, double T) {
+    double N_d1 = N(d1(S, K, r, sigma, T));
+    double N_d2 = N(d2(S, K, r, sigma, T));
+    return S * N_d1 - K * std::exp(-r * T) * N_d2;
+}
+
+// Function to calculate vega (sensitivity of the option price to volatility) in Black-Scholes formula
+double call_vega(double S, double K, double r, double sigma, double T) {
+    double N_d1 = N(d1(S, K, r, sigma, T));
+    return S * std::sqrt(T) * N1(d1(S, K, r, sigma, T));
+}
+
+// Function to calculate implied volatility using Black-Scholes formula
+double call_imp_vol(double S, double K, double r, double T, double C0, double sigma_est, double tol) {
+    double price = call_price(S, K, r, sigma_est, T);
+    double vega = call_vega(S, K, r, sigma_est, T);
+    double sigma = - (price - C0) / vega + sigma_est;
+
+    double iter = 0;
+    double max_iter = 100000000000;
+
+    // Iterative approach to refine the estimate
+    //std::cout << "Atcual Price: " << C0 << std::endl;
+    while (  price > C0 + tol  && iter < max_iter) {
+        //std::cout << price << std::endl;
+        price = price - 5;
+        vega = call_vega(S, K, r, sigma, T);
+        sigma = std::abs((price - C0) / vega + sigma_est);
+        iter++;
+    }
+    //std::cout << "---" << std::endl;
+    while ( price < C0 - tol && iter < max_iter) {
+        //std::cout << price << std::endl;
+        price = price + 5;
+        vega = call_vega(S, K, r, sigma, T);
+        sigma = std::abs((price - C0) / vega + sigma_est);
+        iter++;
+    }
+    //std::cout << "---" << std::endl;
+    return sigma;
+}
+
+
 
 
 
@@ -124,6 +196,12 @@ int main(int argc, char* argv[]) {
                     if (!timestampStream.fail()) {
                         auto timePoint = std::chrono::system_clock::from_time_t(std::mktime(&tmStruct));
                         lineData.created_at = timePoint;
+                        // Set fixed time to MATURITY: October 18, 2024
+                        std::tm fixedTimeStruct = {0, 0, 0, 18, 9, 2024 - 1900, 0, 0, -1};
+                        auto fixedTime = std::chrono::system_clock::from_time_t(std::mktime(&fixedTimeStruct));
+                        auto duration = fixedTime - timePoint;
+                        lineData.timetomat = std::chrono::duration_cast<std::chrono::duration<double>>(duration).count() / (365.25 * 24 * 60 * 60); // Convert seconds to years
+
                     } else {
                         // Handle timestamp parsing failure
                     }
@@ -149,31 +227,65 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Calculate realized volatility
-        const int windowSize = 20; // You can adjust the window size as needed
+        // Calculate Realized & Implied volatilities
         std::vector<double> logReturns;
 
+        const int windowSize = 114; // 114 samples a day on average. 
+        // Sigma from B&S error tolerance compared to our estimated Sigma.
+        const double tolerance = 1;
+        double rf = 0.0000004; //Rf converted to a 15min yield. ((100% * (252/365)) / (252*6*60)) / 15 
+
         for (size_t i = 1; i < cleanedLines.size(); ++i) {
-            double spotReturn = std::log(cleanedLines[i].spotPrice / cleanedLines[i - 1].spotPrice);
+            double spotReturn = log(cleanedLines[i].spotPrice / cleanedLines[i - 1].spotPrice);
             logReturns.push_back(spotReturn);
 
             // Check if enough data points are available for calculation
-            if (logReturns.size() >= static_cast<size_t>(windowSize)) {
-                cleanedLines[i].realizedVol = calculateSD(std::vector<double>(logReturns.end() - windowSize, logReturns.end()), windowSize) * std::sqrt(252.0 * 15);
-                //15 MINS is average time bewtween samples (to make it an anual rate).
+            if (logReturns.size() >= windowSize) {
+                cleanedLines[i].realizedVol = calculateRollingSD(logReturns, windowSize) * sqrt(252.0 * 18);
+                // 15 MINS is average time between samples (to make it an annual rate).
+            }
+
+            if(i == 0){
+                double iv = call_imp_vol(cleanedLines[i].spotPrice,
+                        cleanedLines[i].strike,
+                        rf,
+                        cleanedLines[i].timetomat, 
+                        cleanedLines[i].callPrice,
+                        cleanedLines[i-1].realizedVol,
+                        tolerance);
+                cleanedLines[i].impliedVol = iv;
+            }else{
+                double last_price = cleanedLines[i-1].callPrice;
+                double curr_price = cleanedLines[i].callPrice;
+
+                if (last_price != curr_price){
+                    double iv = call_imp_vol(cleanedLines[i].spotPrice,
+                                     cleanedLines[i].strike,
+                                     rf,
+                                     cleanedLines[i].timetomat, 
+                                     cleanedLines[i].callPrice,
+                                     cleanedLines[i-1].realizedVol,
+                                     tolerance);
+                    cleanedLines[i].impliedVol = iv;
+                }else{
+                    cleanedLines[i].impliedVol = cleanedLines[i-1].impliedVol;
+                }
             }
         }
 
 
         // Print the vector elements
+        
         for (const auto& data : cleanedLines) {
             std::cout << "Strike: " << data.strike << ", ";
-            std::cout << "Timestamp: " << std::chrono::system_clock::to_time_t(data.created_at) << ", ";
+            std::cout << "Time To Mat: " << data.timetomat << ", ";
             std::cout << "Call Price: " << data.callPrice << ", ";
             std::cout << "Spot Price: " << data.spotPrice << ", ";
             std::cout << "Realized Volatility: " << data.realizedVol << ", ";
             std::cout << "Implied Volatility: " << data.impliedVol << std::endl;
         }
+        
+        
 
         return 0;
     } else {
