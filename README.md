@@ -2,7 +2,9 @@
 ## NEIX Algorithmic Trader Task
 
 ### Aquí los pasos que tomé para resolver este ejercicio:
+
 <br />
+
 - **Recibir y limpiar datos de entrada:**
   - Leer CSV.
   - Renombrar columnas.
