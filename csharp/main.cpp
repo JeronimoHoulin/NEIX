@@ -10,6 +10,7 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <numeric>
 
 struct LineData {
     std::chrono::system_clock::time_point created_at; // Timestamp
@@ -45,7 +46,21 @@ bool isFloat(const std::string& s) {
     }
 }
 
+float calculateSD(const std::vector<double>& data, size_t windowSize) {
+    float sum = 0.0, mean, standardDeviation = 0.0;
 
+    for (size_t i = 0; i < windowSize; ++i) {
+        sum += data[i];
+    }
+
+    mean = sum / windowSize;
+
+    for (size_t i = 0; i < windowSize; ++i) {
+        standardDeviation += pow(data[i] - mean, 2);
+    }
+
+    return sqrt(standardDeviation);
+}
 
 
 
@@ -133,6 +148,22 @@ int main(int argc, char* argv[]) {
                 cleanedLines.push_back(lineData);
             }
         }
+
+        // Calculate realized volatility
+        const int windowSize = 20; // You can adjust the window size as needed
+        std::vector<double> logReturns;
+
+        for (size_t i = 1; i < cleanedLines.size(); ++i) {
+            double spotReturn = std::log(cleanedLines[i].spotPrice / cleanedLines[i - 1].spotPrice);
+            logReturns.push_back(spotReturn);
+
+            // Check if enough data points are available for calculation
+            if (logReturns.size() >= static_cast<size_t>(windowSize)) {
+                cleanedLines[i].realizedVol = calculateSD(std::vector<double>(logReturns.end() - windowSize, logReturns.end()), windowSize) * std::sqrt(252.0 * 15);
+                //15 MINS is average time bewtween samples (to make it an anual rate).
+            }
+        }
+
 
         // Print the vector elements
         for (const auto& data : cleanedLines) {
