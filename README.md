@@ -34,7 +34,10 @@
 
   ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/Final.png)
 
-Este trabajo fue escrito en `python`, y las visualizaciones con la librería `matplotlib`. Puedes ejecutar el script `main.py` en la carpeta `python` para observar el gráfico en cuestión. El trabajo también está escrito en `c++` tomando la misma estructura y supuestos, ejecutando el script `main.cpp` en `c++`. Sin gráficos, pero la salida de datos del script en `c++` se puede ver en `output.csv`.
+**Resumen**
+Este trabajo fue escrito en `python`, y las visualizaciones con la librería `matplotlib`. Puedes ejecutar el script `main.py` en la carpeta `python` para observar el gráfico en cuestión. 
+
+El trabajo también está escrito en `c++` tomando la misma estructura y supuestos. Compilando el script `main.cpp` y ejecutando el resultante `main.exe`, podrá encontrarse la salida de datos en `output.csv`.
 
 Ejemplo de salida esperada en `c++`:
 
