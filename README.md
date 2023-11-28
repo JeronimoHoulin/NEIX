@@ -14,20 +14,21 @@
 
   ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/call_outliers.jpeg)
 
-- **Agregar datos:**
+- **Agregar datos calculados:**
   - Precio de Call / Subyacente promedio.
-  - Volatilidad Realizada.
+  - Volatilidad Realizada (VR).
     - Desviación estándar de los retornos lognormales.
     - Supuestos:
       - 252 días hábiles, 6 horas por rueda.
-      - Se ha calculado el promedio de muestras al día y de minutos entre cada muestra para llegar a un descuento intra-diario.
-  - Volatilidad Implícita.
+      - Se ha calculado el promedio de muestras al día y de minutos entre cada muestra para llegar a una VR anualizada.
+  - Volatilidad Implícita (VI).
     - Con el modelo de B&S hemos logrado el Sigma (Volatilidad Implícita) a fuerza bruta.
-    - Probando el modelo y ajustando el Vega derivada de B&S en función de la volatilidad (σ).
-    - Le damos al modelo un máximo de intentos y una tolerancia del 1% como rango de error.
+    - Tasa libre de riesgo (rf) ha sido convertida a intra-diaria para lograr un descuento adecuado de los datos (promedio de 18min x nueva cotizacion).
+    - Probamos el modelo por cada nuevo precio del Call y ajustamos el Vega; la derivada de B&S en función de la volatilidad (σ).
+    - Le damos al modelo un máximo de intentos y una tolerancia del 1% como rango de error en su resultado de σ.
 
 - **Visualizar los datos:**
-  - Gráfico de precio Spot de GGAL (subyacente) vs las volatilidades.
+  - Gráfico de precio Spot de GGAL (subyacente) vs las volatilidades (VR en rojo y VI en violeta).
 
   ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/Final.png)
 
