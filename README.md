@@ -26,6 +26,8 @@
     - Tasa libre de riesgo (rf) ha sido convertida a intra-diaria para lograr un descuento adecuado de los datos (promedio de 18min x nueva cotizacion).
     - Probamos el modelo por cada nuevo precio del Call y ajustamos el Vega; la derivada de B&S en función de la volatilidad (`σ`).
     - Le damos al modelo un máximo de intentos y una tolerancia del 1% como rango de error en su resultado de `σ`.
+    - Supuestos:
+      - La forma mas óptima de encontrar la VI con el modelo de B&S es con el metodo de Newton-Raphson (iterando la formula B&S hasta ajustar el precio teorico con el precio de mercado).
 
 - **Visualizar los datos:**
   - Gráfico de precio Spot de GGAL (subyacente) vs las volatilidades (VR en rojo y VI en violeta).
