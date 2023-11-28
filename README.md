@@ -10,7 +10,7 @@
   - Renombrar columnas.
   - Cambiar muestras a tipos de datos adecuados.
   - Deshacerse de NA's y muestras vacías (<1% de los datos).
-  - Como se puede apreciar en la siguiente imagen, el precio de mercado del Call ha visto cotizaciones atípicas que podrían deberse a mala entrada de datos o aperturas después de días no hábiles muy volátiles.
+  - Como se puede apreciar en la siguiente imagen, el precio de mercado del Call ha visto cotizaciones atípicas que podrían deberse a mala entrada de datos o aperturas después de días no hábiles muy volátiles (estos picos fueron descartados).
 
   ![Imagen](https://github.com/JeronimoHoulin/NEIX/blob/main/content/call_outliers.jpeg)
 
